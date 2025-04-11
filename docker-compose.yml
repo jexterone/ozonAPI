@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: ozon_db
+      POSTGRES_USER: ozon_user
+      POSTGRES_PASSWORD: ozon_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6380:6379" # Redis доступен на порту 6380
+
+  backend:
+    build: ./backend
+    command: daphne -b 0.0.0.0 -p 8000 backend.asgi:application
+    volumes:
+      - ./backend:/app
+      - ./backend/static:/app/static  # Монтируем статические файлы
+    ports:
+      - "8000:8000"
+    depends_on:
+      - database
+      - redis
+    environment:
+      - DB_HOST=database
+      - DB_NAME=ozon_db
+      - DB_USER=ozon_user
+      - DB_PASSWORD=ozon_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  celery:
+    build: ./backend
+    command: celery -A backend worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - redis
+      - backend
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  frontend:
+    build: ./frontend
+    command: npm start
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
